@@ -504,21 +504,18 @@ def print_classification_metrics(y_true, y_pred, dataset_name="Dataset"):
     print(classification_report(y_true, y_pred, target_names=["Normal", "Anomalous"]))
 
 
-
-
-
 if __name__ == "__main__":
     
     
-    framesPath = 'D:\study\SEM-4\CapstoneProject\frames'
-    videosPath = 'D:/project/videos/normal_video_train'
+    framesPath = 'video_anomaly_detection_ui\frames'  
+    videosPath = 'video_anomaly_detection_ui/normal_video_train'
     
     # Directory to save labeled sequences
-    output_dir = "D:\study\SEM-4\CapstoneProject\labeled_sequences" 
+    output_dir = "video_anomaly_detection_ui\labeled_sequences" 
     
     
-    input_dir = "D:\study\SEM-4\CapstoneProject\preprocessed_frames" # Path to all frame directories
-    sequence_dir = "D:\study\SEM-4\CapstoneProject\sequences"  # Path to save sequence files
+    input_dir = "video_anomaly_detection_ui\preprocessed_frames" # Path to all frame directories
+    sequence_dir = "video_anomaly_detection_ui\sequences"  # Path to save sequence files
     
     # extract_frames(video_path, output_dir, frame_rate=30)
     for video_file in os.listdir(videosPath):
@@ -570,7 +567,7 @@ if __name__ == "__main__":
     
     
     # Combine all labeled sequences
-    labeled_dir = "D:\study\SEM-4\CapstoneProject\labeled_sequences"
+    labeled_dir = "video_anomaly_detection_ui\labeled_sequences"
     sequences, labels = combine_labeled_sequences(labeled_dir)
     print(f"Total sequences: {len(sequences)}")
     print(f"Total labels: {len(labels)}")
