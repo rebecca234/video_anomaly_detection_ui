@@ -342,19 +342,183 @@ class STCN(nn.Module):
 
 
 
+def train_model(model, train_loader, criterion, optimizer, num_epochs=10, device="cpu"):
+    model.to(device)
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+        running_loss = 0.0
+
+        with tqdm(total=len(train_loader), desc=f"Epoch {epoch}/{num_epochs}", unit="batch") as pbar:
+            for data, target in train_loader:
+                data, target = data.to(device), target.to(device)
+
+                # Flatten target to match model output
+                target = target.view(-1)  # From torch.Size([8, 1]) -> torch.Size([8])
+
+                # Forward pass
+                outputs = model(data).squeeze()  # Ensure output is torch.Size([8])
+                loss = criterion(outputs, target)
+
+                # Backward pass and optimization
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item()
+                pbar.set_postfix({"Loss": f"{loss.item():.4f}"})
+                pbar.update(1)
+
+        print(f"Epoch {epoch}/{num_epochs} - Training Loss: {running_loss / len(train_loader):.4f}")
+        # validate_model(model, val_loader, criterion, device)
+
+
+
+
+
+def validate_model(model, val_loader, criterion, device):
+    model.eval()  # Set the model to evaluation mode
+    total_loss = 0
+    total_correct = 0
+    total_samples = 0
+
+    with torch.no_grad():  # Disable gradient calculation
+        for sequences, labels in val_loader:
+            sequences, labels = sequences.to(device), labels.to(device)
+
+            # Forward pass
+            outputs = model(sequences).squeeze()  # Ensure output shape matches labels
+            labels = labels.view(-1)  # Flatten labels if necessary
+
+            # Calculate loss
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+
+            # Convert probabilities to binary predictions (0 or 1)
+            predictions = (outputs > 0.5).float()
+            total_correct += (predictions == labels).sum().item()
+            total_samples += labels.size(0)
+
+    # Calculate accuracy
+    accuracy = total_correct / total_samples
+    print(f"Validation Loss: {total_loss / len(val_loader):.4f}, Accuracy: {accuracy:.4f}")
+
+
+def test_model(model, test_loader, device="cpu"):
+    model.eval()
+    total_loss = 0.0
+    correct = 0
+    total = 0
+
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device).view(-1)  # Flatten target
+
+            # Forward pass
+            outputs = model(data).squeeze()  # Outputs are probabilities
+            predictions = (outputs > 0.5).float()  # Convert probabilities to binary predictions
+
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(target.cpu().numpy())
+
+            correct += (predictions == target).sum().item()
+            total += target.size(0)
+
+    # Calculate metrics
+    accuracy = correct / total
+    print(f"Test Accuracy: {accuracy:.4f}")
+
+
+def get_predictions(model, data_loader, device="cpu"):
+    model.eval()
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for data, target in data_loader:
+            data, target = data.to(device), target.to(device).view(-1)
+            outputs = model(data).squeeze()
+            predictions = (outputs > 0.5).float()  # Binary classification
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(target.cpu().numpy())
+
+    return all_labels, all_preds
+
+
+def infer_sequences(model, sequences, device):
+    model.eval()
+    preds = []
+    with torch.no_grad():
+        for seq in sequences:
+            # seq: (T, H, W, C) floats in [0,1]
+            x = torch.tensor(seq, dtype=torch.float32) \
+                      .permute(3,0,1,2)            # [C,T,H,W]
+            x = x.unsqueeze(0).to(device)           # [1,C,T,H,W]
+            out = model(x).item()                   # scalar probability
+            preds.append(1 if out > 0.5 else 0)
+    return preds
+
+def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix", labels=["Normal", "Anomalous"]):
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(6, 4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=labels, yticklabels=labels)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title(title)
+    plt.show()
+
+
+
+def compute_metrics(y_true, y_pred):
+    """
+    Compute key metrics for classification.
+    Args:
+        y_true: Ground truth labels.
+        y_pred: Predicted labels.
+    Returns:
+        A dictionary of metrics.
+    """
+    metrics = {
+        "Accuracy": accuracy_score(y_true, y_pred),
+        "Precision": precision_score(y_true, y_pred, zero_division=0),
+        "Recall": recall_score(y_true, y_pred, zero_division=0),
+        "F1-Score": f1_score(y_true, y_pred, zero_division=0)
+    }
+    return metrics
+
+def print_classification_metrics(y_true, y_pred, dataset_name="Dataset"):
+    """
+    Print and return classification metrics for a dataset.
+    Args:
+        y_true: Ground truth labels.
+        y_pred: Predicted labels.
+        dataset_name: Name of the dataset (e.g., Training or Test).
+    """
+    print(f"\nMetrics for {dataset_name}:\n")
+    metrics = compute_metrics(y_true, y_pred)
+    for metric, value in metrics.items():
+        print(f"{metric}: {value:.4f}")
+    print("\nClassification Report:\n")
+    print(classification_report(y_true, y_pred, target_names=["Normal", "Anomalous"]))
+
+
+
+
 
 if __name__ == "__main__":
     
     
-    framesPath = 'video_anomaly_detection_ui\frames'  
-    videosPath = 'video_anomaly_detection_ui/normal_video_train'
+    framesPath = 'D:\study\SEM-4\CapstoneProject\frames'
+    videosPath = 'D:/project/videos/normal_video_train'
     
     # Directory to save labeled sequences
-    output_dir = "video_anomaly_detection_ui\labeled_sequences" 
+    output_dir = "D:\study\SEM-4\CapstoneProject\labeled_sequences" 
     
     
-    input_dir = "video_anomaly_detection_ui\preprocessed_frames" # Path to all frame directories
-    sequence_dir = "video_anomaly_detection_ui\sequences"  # Path to save sequence files
+    input_dir = "D:\study\SEM-4\CapstoneProject\preprocessed_frames" # Path to all frame directories
+    sequence_dir = "D:\study\SEM-4\CapstoneProject\sequences"  # Path to save sequence files
     
     # extract_frames(video_path, output_dir, frame_rate=30)
     for video_file in os.listdir(videosPath):
@@ -406,8 +570,137 @@ if __name__ == "__main__":
     
     
     # Combine all labeled sequences
-    labeled_dir = "video_anomaly_detection_ui\labeled_sequences"
+    labeled_dir = "D:\study\SEM-4\CapstoneProject\labeled_sequences"
     sequences, labels = combine_labeled_sequences(labeled_dir)
     print(f"Total sequences: {len(sequences)}")
     print(f"Total labels: {len(labels)}")
     
+    
+
+    # Split data: 70% train, 30% temp (validation + test) with stratification
+    train_sequences, temp_sequences, train_labels, temp_labels = train_test_split(
+        sequences, labels, test_size=0.3, random_state=42, stratify=labels  # Ensure balanced splits
+    )
+
+
+    # Split temp data: 15% validation, 15% test (from 30% temp) with stratification
+    val_sequences, test_sequences, val_labels, test_labels = train_test_split(
+        temp_sequences, temp_labels, test_size=0.5, random_state=42, stratify=temp_labels  # Ensure balanced splits
+    )
+
+    print(f"Training set: {len(train_sequences)} sequences")
+    print(f"Validation set: {len(val_sequences)} sequences")
+    print(f"Test set: {len(test_sequences)} sequences")
+
+
+
+    # Oversample the minority class in the training set
+    train_data = list(zip(train_sequences, train_labels))
+    majority_class = [d for d in train_data if d[1] == 0]  # Normal class
+    minority_class = [d for d in train_data if d[1] == 1]  # Anomalous class
+
+
+    # Oversample the minority class
+    oversampled_minority = resample(minority_class, replace=True, n_samples=len(majority_class), random_state=42)
+
+    # Combine majority and oversampled minority class
+    balanced_train_data = majority_class + oversampled_minority
+
+    random.shuffle(balanced_train_data)
+
+    # Separate sequences and labels
+    train_sequences, train_labels = zip(*balanced_train_data)
+   
+    
+    # Create datasets
+    train_dataset = VideoSequenceDataset(train_sequences, train_labels)
+    val_dataset = VideoSequenceDataset(val_sequences, val_labels)
+    test_dataset = VideoSequenceDataset(test_sequences, test_labels)
+
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
+    
+    
+    # # Instantiate the model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = STCN(input_channels=3, sequence_length=16, height=64, width=64).to(device)
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+
+
+    # Test a batch of data
+    batch = torch.randn(8, 3, 16, 64, 64).to(device)  # Example batch with correct dimensions
+    output = model(batch)
+    print("Output shape:", output.shape)  # Expected: [8, 1]
+    
+    
+    # Define model
+    model = STCN(input_channels=3, sequence_length=16, height=64, width=64)
+
+    # Define optimizer and loss function
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.BCELoss()
+
+
+    # Train the model
+    train_model(
+        model=model,
+        train_loader=train_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        num_epochs=10,
+        device="cpu"  # Explicitly use CPU
+    )
+    
+    
+    validate_model(model, val_loader, criterion, device="cpu")
+    
+    test_model(model, test_loader, device="cpu")
+    
+    
+    
+    # Get predictions and ground truth for training set
+    train_labels, train_preds = get_predictions(model, train_loader, device="cpu")
+
+    # Plot the confusion matrix for the training set
+    plot_confusion_matrix(train_labels, train_preds, title="Training Confusion Matrix")
+
+    # Compute and print metrics for the training set
+    print_classification_metrics(train_labels, train_preds, dataset_name="Training Data")
+
+    # get metrics for training set
+    train_metrics = compute_metrics(train_labels, train_preds)
+
+
+
+    # Get predictions and ground truth for validation set
+    val_labels, val_preds = get_predictions(model, val_loader, device="cpu")
+
+    # Plot the confusion matrix for the validation set
+    plot_confusion_matrix(val_labels, val_preds, title="Validation Confusion Matrix")
+
+    # Compute and print metrics for the validation set
+    print_classification_metrics(val_labels, val_preds, dataset_name="Validation Data")
+
+    # get metrics for validation set
+    val_metrics = compute_metrics(val_labels, val_preds)
+
+
+
+    # Get predictions and ground truth for test set
+    test_labels, test_preds = get_predictions(model, test_loader, device="cpu")
+
+    # Plot the confusion matrix for the test set
+    plot_confusion_matrix(test_labels, test_preds, title="Test Confusion Matrix")
+
+    # Compute and print metrics for the test set
+    print_classification_metrics(test_labels, test_preds, dataset_name="Test Data")
+
+    # get metrics for test set
+    test_metrics = compute_metrics(test_labels, test_preds)
+
+
+
+      
