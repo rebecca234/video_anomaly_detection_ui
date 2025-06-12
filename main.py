@@ -274,6 +274,74 @@ def combine_labeled_sequences(labeled_dir):
 
 
 
+class VideoSequenceDataset(Dataset):
+    def __init__(self, sequences, labels):
+        self.sequences = sequences  # List of sequences
+        self.labels = labels        # Corresponding labels
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        sequence = torch.tensor(self.sequences[idx], dtype=torch.float32)  # [sequence_length, height, width, channels]
+        # Reorder dimensions to [channels, sequence_length, height, width]
+        sequence = sequence.permute(3, 0, 1, 2)
+        label = torch.tensor(self.labels[idx], dtype=torch.float32)
+        return sequence, label
+
+
+
+
+class STCN(nn.Module):
+    def __init__(self, input_channels=3, sequence_length=16, height=128, width=128):
+        super(STCN, self).__init__()
+
+        self.conv1 = nn.Conv3d(input_channels, 32, kernel_size=(3, 3, 3), stride=1, padding=1)
+        self.pool1 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
+
+        self.conv2 = nn.Conv3d(32, 64, kernel_size=(3, 3, 3), stride=1, padding=1)
+        self.pool2 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
+
+        self.conv3 = nn.Conv3d(64, 128, kernel_size=(3, 3, 3), stride=1, padding=1)
+        self.pool3 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
+        
+        self.conv4 = nn.Conv3d(128, 256, kernel_size=(3, 3, 3), stride=1, padding=1)
+        self.pool4 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
+
+        # Dynamically calculate the flattened size
+        with torch.no_grad():
+            dummy_input = torch.zeros((1, input_channels, sequence_length, height, width))
+            dummy_output = self.pool4(self.conv4(self.pool3(self.conv3(self.pool2(self.conv2(self.pool1(self.conv1(dummy_input))))))))
+            # dummy_output = (self.pool3(self.conv3(self.pool2(self.conv2(self.pool1(self.conv1(dummy_input)))))))
+            self.flattened_size = dummy_output.numel()
+
+        self.fc1 = nn.Linear(self.flattened_size, 512)
+        self.fc2 = nn.Linear(512, 1)
+        #self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.pool1(F.relu(self.conv1(x)))
+        # print(f"After Conv1 + Pool1: {x.shape}")  # Debugging
+
+        x = self.pool2(F.relu(self.conv2(x)))
+        # print(f"After Conv2 + Pool2: {x.shape}")
+        
+        x = self.pool3(F.relu(self.conv3(x)))
+        # print(f"After Conv3 + Pool3: {x.shape}")
+        
+        x = self.pool4(F.relu(self.conv4(x)))
+        # print(f"After Conv4 + Pool4: {x.shape}")
+
+        # x = x.view(x.size(0), -1)  # Flatten
+        
+        x = x.reshape(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        #return self.sigmoid(x)
+        return x
+
+
+
 
 if __name__ == "__main__":
     
@@ -343,7 +411,3 @@ if __name__ == "__main__":
     print(f"Total sequences: {len(sequences)}")
     print(f"Total labels: {len(labels)}")
     
-
-
-
-      
