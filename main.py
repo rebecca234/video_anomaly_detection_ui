@@ -271,9 +271,6 @@ def combine_labeled_sequences(labeled_dir):
 
     return all_sequences, all_labels
 
-
-
-
 class VideoSequenceDataset(Dataset):
     def __init__(self, sequences, labels):
         self.sequences = sequences  # List of sequences
@@ -288,8 +285,6 @@ class VideoSequenceDataset(Dataset):
         sequence = sequence.permute(3, 0, 1, 2)
         label = torch.tensor(self.labels[idx], dtype=torch.float32)
         return sequence, label
-
-
 
 
 class STCN(nn.Module):
@@ -697,7 +692,3 @@ if __name__ == "__main__":
 
     # get metrics for test set
     test_metrics = compute_metrics(test_labels, test_preds)
-
-
-
-      
